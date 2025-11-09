@@ -333,6 +333,7 @@ const Carousel = () => {
           {/* Video 1 - Active when activeVideoIndex === 0 */}
           <motion.video
             ref={backgroundVideoRef1}
+            src={currentItem.backgroundVideoUrl || currentItem.videoUrl || ''}
             autoPlay
             loop
             muted
@@ -350,11 +351,15 @@ const Carousel = () => {
               opacity: { duration: 0.5, ease: 'easeInOut' },
             }}
             style={{ zIndex: activeVideoIndex === 0 ? 1 : 0 }}
+            onError={(e) => {
+              console.error('Video 1 load error:', e.currentTarget.error, 'src:', e.currentTarget.src);
+            }}
           />
           
           {/* Video 2 - Active when activeVideoIndex === 1 */}
         <motion.video
             ref={backgroundVideoRef2}
+            src={currentItem.backgroundVideoUrl || currentItem.videoUrl || ''}
           autoPlay
           loop
           muted
@@ -372,6 +377,9 @@ const Carousel = () => {
               opacity: { duration: 0.5, ease: 'easeInOut' },
           }}
             style={{ zIndex: activeVideoIndex === 1 ? 1 : 0 }}
+            onError={(e) => {
+              console.error('Video 2 load error:', e.currentTarget.error, 'src:', e.currentTarget.src);
+            }}
         />
         </>
       )}
