@@ -134,7 +134,7 @@ export const utopiaContent: UtopiaItem[] = [
     id: 26,
     title: 'ZNMD RECREATE',
     type: 'video',
-    thumbnail: '/images/exps.webp',
+    thumbnail: '/images/exps_26.webp',
     videoUrl: '/videos/4x4.mp4',
     backgroundVideoUrl: '/videos/exps_26.webm',
     youtubeUrl: 'https://youtu.be/DVMSDIJTQhM',
