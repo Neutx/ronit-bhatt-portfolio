@@ -16,7 +16,7 @@ export const utopiaContent: UtopiaItem[] = [
     type: 'video',
     thumbnail: '/images/exps_11.webp',
     videoUrl: '/videos/4x4.mp4',
-    backgroundVideoUrl: '/videos/exps_11.webm',
+    backgroundVideoUrl: '/videos/exps_41.webm',
     youtubeUrl: 'https://youtu.be/TN-SIlKZbXc',
   },
   {
