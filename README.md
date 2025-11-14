@@ -1,6 +1,3 @@
-# Utopia World Clone
-
-A pixel-perfect clone of Travis Scott's Utopia World website featuring interactive carousel, video sections, and modern animations.
 
 ## Tech Stack
 
