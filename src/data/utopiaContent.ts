@@ -10,15 +10,15 @@ export interface UtopiaItem {
 }
 
 export const utopiaContent: UtopiaItem[] = [
-  {
-    id: 27,
-    title: 'POU 2025',
-    type: 'video',
-    thumbnail: '/images/mm.webp',
-    videoUrl: '/videos/4x4.mp4',
-    backgroundVideoUrl: '/videos/mm.webm',
-    youtubeUrl: 'https://youtu.be/uY9pqfvw1nQ',
-  },
+  // {
+  //   id: 27,
+  //   title: 'POU 2025',
+  //   type: 'video',
+  //   thumbnail: '/images/mm.webp',
+  //   videoUrl: '/videos/4x4.mp4',
+  //   backgroundVideoUrl: '/videos/mm.webm',
+  //   youtubeUrl: 'https://youtu.be/uY9pqfvw1nQ',
+  // },
   {
     id: 10,
     title: 'Absence',
