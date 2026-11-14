@@ -1,45 +1,89 @@
 'use client';
 
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, LazyMotion, m } from 'framer-motion';
 import { useEffect } from 'react';
-import gsap from 'gsap';
+import dynamic from 'next/dynamic';
 import { useNavigationStore } from '@/src/store/navigationStore';
-import { useLoader } from '@/src/contexts/LoaderContext';
 import Carousel from '@/src/components/Carousel';
-import AboutMe from '@/src/components/AboutMe';
-import CommercialWork from '@/src/components/CommercialWork';
-import BrandsPage from '@/src/components/BrandsPage';
-import CreativeProcess from '@/src/components/CreativeProcess';
+import { afterLoad } from '@/src/lib/afterLoad';
+import { markMotionFeaturesReady } from '@/src/lib/motionReady';
+
+// Non-initial views are code-split out of the boot bundle; Carousel stays static
+// because it is the initial view and holds the LCP image.
+const loadAboutMe = () => import('@/src/components/AboutMe');
+const loadCommercialWork = () => import('@/src/components/CommercialWork');
+const loadBrandsPage = () => import('@/src/components/BrandsPage');
+const loadCreativeProcess = () => import('@/src/components/CreativeProcess');
+
+// framer-motion's feature bundle (animations, gestures, drag) is split out of
+// the boot bundle and fetched once the page has loaded and the main thread is
+// idle, or on the first user input if that comes sooner. The `m` components
+// render their initial frame without it, so first paint and LCP never wait on
+// it. The split views use the self-contained `motion` component.
+const loadMotionFeatures = () =>
+  new Promise<void>((resolve) => {
+    const inputEvents = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    let cancelAfterLoad = () => {};
+    const done = () => {
+      cancelAfterLoad();
+      inputEvents.forEach((type) => window.removeEventListener(type, done, true));
+      resolve();
+    };
+    inputEvents.forEach((type) =>
+      window.addEventListener(type, done, { capture: true, passive: true, once: true })
+    );
+    cancelAfterLoad = afterLoad(done, { timeout: 1500 });
+  }).then(() =>
+    import('@/src/lib/motionFeatures').then((mod) => {
+      // Flag first so components render with their final keys when LazyMotion
+      // re-renders with the loaded renderer (see Carousel).
+      markMotionFeaturesReady();
+      return mod.default;
+    })
+  );
+
+const AboutMe = dynamic(loadAboutMe, { ssr: false });
+const CommercialWork = dynamic(loadCommercialWork, { ssr: false });
+const BrandsPage = dynamic(loadBrandsPage, { ssr: false });
+const CreativeProcess = dynamic(loadCreativeProcess, { ssr: false });
 
 export default function Home() {
   const currentView = useNavigationStore((state) => state.currentView);
-  const { isLoaded } = useLoader();
-  
-  // Ensure main section is always visible and interactive after navigation
-  useEffect(() => {
-    // Small delay to ensure DOM is updated
-    const timer = setTimeout(() => {
-      gsap.set('.page-container', {
-        pointerEvents: 'auto',
-        visibility: 'visible',
-        opacity: 1,
-        filter: 'blur(0px)'
-      });
-    }, 100);
-    
-    return () => clearTimeout(timer);
-  }, [currentView, isLoaded]);
-  
+
+  // Warm the split view chunks once the page has loaded and the main thread is
+  // idle, so switching views inside AnimatePresence mode="wait" never shows an
+  // empty frame while a chunk downloads.
+  useEffect(
+    () =>
+      afterLoad(
+        () => {
+          void Promise.all([
+            loadAboutMe(),
+            loadCommercialWork(),
+            loadBrandsPage(),
+            loadCreativeProcess(),
+          ]).catch(() => {
+            // Ignore: dynamic() retries the import when the view is opened
+          });
+        },
+        { timeout: 5000 }
+      ),
+    []
+  );
+
   return (
     <main 
-      className="fixed inset-0 w-screen h-screen bg-black page-container"
+      className="fixed inset-0 bg-black page-container"
       style={{ 
         overflow: 'hidden'
       }}
     >
-      <AnimatePresence mode="wait">
+      {/* initial={false}: the first view is server-rendered visible (no opacity:0
+          in the static HTML) so it paints at FCP; later view switches still fade. */}
+      <LazyMotion features={loadMotionFeatures}>
+      <AnimatePresence mode="wait" initial={false}>
         {currentView === 'home' ? (
-          <motion.div 
+          <m.div 
             key="home" 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -49,9 +93,9 @@ export default function Home() {
             style={{ overflow: 'visible' }}
           >
             <Carousel />
-          </motion.div>
+          </m.div>
         ) : currentView === 'about' ? (
-          <motion.div 
+          <m.div 
             key="about" 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -61,9 +105,9 @@ export default function Home() {
             style={{ overflow: 'visible' }}
           >
             <AboutMe />
-          </motion.div>
+          </m.div>
         ) : currentView === 'commercial' ? (
-          <motion.div 
+          <m.div 
             key="commercial" 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -73,9 +117,9 @@ export default function Home() {
             style={{ overflow: 'visible' }}
           >
             <CommercialWork />
-          </motion.div>
+          </m.div>
         ) : currentView === 'creative-process' ? (
-          <motion.div 
+          <m.div 
             key="creative-process" 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -85,9 +129,9 @@ export default function Home() {
             style={{ overflow: 'visible' }}
           >
             <CreativeProcess />
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div 
+          <m.div 
             key="brands" 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -97,9 +141,10 @@ export default function Home() {
             style={{ overflow: 'visible' }}
           >
             <BrandsPage />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
+      </LazyMotion>
     </main>
   );
 }

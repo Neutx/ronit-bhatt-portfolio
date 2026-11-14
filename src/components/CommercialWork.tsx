@@ -1,16 +1,26 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { useCarousel } from '@/src/hooks/useCarousel';
 import { usePreloadMedia } from '@/src/hooks/usePreloadMedia';
 import { commercialContent } from '@/src/data/commercialContent';
-import VideoPlayer from './VideoPlayer';
-import MenuPopup from './MenuPopup';
+import { pickVideoSrc, posterFor, isCompactViewport } from '@/src/lib/mediaSources';
+import { centreCardX } from '@/src/lib/centreCardX';
+import { CARD_IMAGE_SIZES } from '@/src/lib/imageLoader';
 import { CardContainer, CardItem } from './ui/3d-card';
 import { EncryptedText } from './ui/encrypted-text';
 import { useNavigationStore } from '@/src/store/navigationStore';
+
+// Non-initial UI: split out of the first-load bundle.
+const VideoPlayer = dynamic(() => import('./VideoPlayer'), { ssr: false });
+const MenuPopup = dynamic(() => import('./MenuPopup'), { ssr: false });
+const warmOverlayChunks = () => {
+  import('./VideoPlayer').catch(() => {});
+  import('./MenuPopup').catch(() => {});
+};
 
 const CommercialWork = () => {
   const { currentIndex, goToNext, goToPrevious } =
@@ -26,36 +36,56 @@ const CommercialWork = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollDirection, setScrollDirection] = useState<'left' | 'right'>('right');
   const [isDragging, setIsDragging] = useState(false);
-  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1920);
+  // Constant initial size so server and client render the same markup; the
+  // real viewport is measured in a layout effect before first paint.
+  const [windowWidth, setWindowWidth] = useState(1920);
+  const [windowHeight, setWindowHeight] = useState(1080);
+  // Card positions snap (no spring) on the first measured render.
+  const [instantLayout, setInstantLayout] = useState(true);
   const [isVideoLoading, setIsVideoLoading] = useState(true);
   const [activeVideoIndex, setActiveVideoIndex] = useState(0); // 0 or 1 for crossfade
+  // True once the active background video has fired 'canplaythrough'.
+  const [isBackgroundReady, setIsBackgroundReady] = useState(false);
   const backgroundVideoRef1 = useRef<HTMLVideoElement>(null);
   const backgroundVideoRef2 = useRef<HTMLVideoElement>(null);
+  // Data URL (pre-pickVideoSrc) currently assigned to each video element.
+  const videoDataUrlsRef = useRef<[string, string]>(['', '']);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isScrollingRef = useRef(false);
   const scrollAccumulatorRef = useRef(0);
 
+  // Card shown when the view mounts; it shares the full-screen placeholder's URL.
+  const initialIndexRef = useRef(currentIndex);
   const currentItem = commercialContent[currentIndex];
   const prevIndex = currentIndex === 0 ? commercialContent.length - 1 : currentIndex - 1;
   const nextIndex = currentIndex === commercialContent.length - 1 ? 0 : currentIndex + 1;
   const prevItem = commercialContent[prevIndex];
   const nextItem = commercialContent[nextIndex];
 
-  // Preload adjacent carousel items to prevent black screens
-  usePreloadMedia({
+  // Warm the next item in the scroll direction once the active video can play
+  // through and the main thread is idle.
+  const warmVideoUrl = usePreloadMedia({
     items: commercialContent,
     currentIndex,
-    preloadRange: 1, // Preload previous and next items
+    direction: scrollDirection,
+    preloadRange: 1,
+    enabled: isBackgroundReady,
   });
 
   // Handle window resize
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
+      setWindowHeight(window.innerHeight);
     };
 
+    handleResize();
+    const frame = requestAnimationFrame(() => setInstantLayout(false));
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   // Load Instagram embed script when Instagram URL is selected
@@ -85,114 +115,141 @@ const CommercialWork = () => {
     const videoUrl = currentItem.backgroundVideoUrl || currentItem.videoUrl;
     if (!videoUrl) return;
 
-    const currentVideoRef = activeVideoIndex === 0 ? backgroundVideoRef1 : backgroundVideoRef2;
-    const nextVideoRef = activeVideoIndex === 0 ? backgroundVideoRef2 : backgroundVideoRef1;
-    
-    // Get current video source filename for comparison
-    const getVideoFilename = (src: string) => {
-      if (!src) return '';
-      const parts = src.split('/');
-      return parts[parts.length - 1];
-    };
-    
-    const currentSrc = currentVideoRef.current?.src || currentVideoRef.current?.currentSrc || '';
-    const currentFilename = getVideoFilename(currentSrc);
-    const targetFilename = getVideoFilename(videoUrl);
-    const needsNewVideo = !currentSrc || currentFilename !== targetFilename;
-    
-    if (needsNewVideo) {
-      // First time loading or video changed
-      if (!currentSrc && currentVideoRef.current) {
-        // Initial load - load into current video
-        setIsVideoLoading(true);
-        currentVideoRef.current.src = videoUrl;
-        currentVideoRef.current.load(); // Explicitly load the video
-        
-        const handleCanPlay = () => {
-          setIsVideoLoading(false);
-          const playPromise = currentVideoRef.current?.play();
-          if (playPromise !== undefined) {
-            playPromise.then(() => {
-              // Video started playing successfully
-            }).catch(() => {
-              // Autoplay may fail, that's okay
-            });
-          }
-        };
-        
-        const handleLoadedData = () => {
-          // Try to play when data is loaded
-          currentVideoRef.current?.play().catch(() => {});
-        };
-        
-        const handleError = () => {
-          setIsVideoLoading(false);
-        };
-        
-        currentVideoRef.current.addEventListener('canplay', handleCanPlay, { once: true });
-        currentVideoRef.current.addEventListener('loadeddata', handleLoadedData, { once: true });
-        currentVideoRef.current.addEventListener('error', handleError, { once: true });
-        
-        return () => {
-          if (currentVideoRef.current) {
-            currentVideoRef.current.removeEventListener('canplay', handleCanPlay);
-            currentVideoRef.current.removeEventListener('loadeddata', handleLoadedData);
-            currentVideoRef.current.removeEventListener('error', handleError);
-          }
-        };
-      } else if (currentSrc && nextVideoRef.current) {
-        // Video changed - load into next video for crossfade
-        setIsVideoLoading(true);
-        nextVideoRef.current.src = videoUrl;
-        nextVideoRef.current.load(); // Explicitly load the video
-        
-        const handleCanPlay = () => {
-          setIsVideoLoading(false);
-          // Start playing the new video
-          const playPromise = nextVideoRef.current?.play();
-          if (playPromise !== undefined) {
-            playPromise.then(() => {
-              // Video started playing successfully
-            }).catch(() => {
-              // Autoplay may fail, that's okay
-            });
-          }
-          // Switch active video after a brief moment for smooth crossfade
-          setTimeout(() => {
-            setActiveVideoIndex(activeVideoIndex === 0 ? 1 : 0);
-          }, 100);
-        };
-        
-        const handleLoadedData = () => {
-          // Try to play when data is loaded
-          nextVideoRef.current?.play().catch(() => {});
-        };
-        
-        const handleError = () => {
-          setIsVideoLoading(false);
-        };
-        
-        nextVideoRef.current.addEventListener('canplay', handleCanPlay, { once: true });
-        nextVideoRef.current.addEventListener('loadeddata', handleLoadedData, { once: true });
-        nextVideoRef.current.addEventListener('error', handleError, { once: true });
-        
-        return () => {
-          if (nextVideoRef.current) {
-            nextVideoRef.current.removeEventListener('canplay', handleCanPlay);
-            nextVideoRef.current.removeEventListener('loadeddata', handleLoadedData);
-            nextVideoRef.current.removeEventListener('error', handleError);
-          }
-        };
+    const activeSlot = activeVideoIndex;
+    const inactiveSlot = activeVideoIndex === 0 ? 1 : 0;
+    const currentVideo = (activeSlot === 0 ? backgroundVideoRef1 : backgroundVideoRef2).current;
+    const nextVideo = (inactiveSlot === 0 ? backgroundVideoRef1 : backgroundVideoRef2).current;
+    const urls = videoDataUrlsRef.current;
+    const markReady = () => setIsBackgroundReady(true);
+
+    if (!urls[activeSlot] && currentVideo) {
+      // Initial load - assign poster + responsive source once, then play
+      setIsVideoLoading(true);
+      setIsBackgroundReady(false);
+      const poster = posterFor(videoUrl);
+      if (poster) currentVideo.poster = poster;
+      currentVideo.src = pickVideoSrc(videoUrl);
+      urls[activeSlot] = videoUrl;
+
+      const handleCanPlay = () => {
+        setIsVideoLoading(false);
+        currentVideo.play().catch(() => {
+          // Autoplay may fail, that's okay
+        });
+      };
+      const handleError = () => {
+        setIsVideoLoading(false);
+      };
+
+      currentVideo.addEventListener('canplay', handleCanPlay, { once: true });
+      currentVideo.addEventListener('canplaythrough', markReady, { once: true });
+      currentVideo.addEventListener('error', handleError, { once: true });
+      currentVideo.play().catch(() => {});
+
+      return () => {
+        currentVideo.removeEventListener('canplay', handleCanPlay);
+        currentVideo.removeEventListener('canplaythrough', markReady);
+        currentVideo.removeEventListener('error', handleError);
+      };
+    }
+
+    if (urls[activeSlot] !== videoUrl && nextVideo) {
+      // Video changed - load into the inactive element for crossfade
+      setIsVideoLoading(true);
+      setIsBackgroundReady(false);
+      if (urls[inactiveSlot] !== videoUrl) {
+        const poster = posterFor(videoUrl);
+        if (poster) nextVideo.poster = poster;
+        nextVideo.preload = 'auto';
+        nextVideo.src = pickVideoSrc(videoUrl);
+        urls[inactiveSlot] = videoUrl;
+      } else {
+        // Already warmed by the preloader - upgrade to full buffering
+        nextVideo.preload = 'auto';
+        // A warmed source that failed to load gets one fresh attempt
+        if (nextVideo.error) nextVideo.src = pickVideoSrc(videoUrl);
       }
-    } else {
-      // Video is already loaded, just ensure it's playing
+
+      let swapTimeout: ReturnType<typeof setTimeout> | undefined;
+      const handleCanPlay = () => {
+        setIsVideoLoading(false);
+        nextVideo.play().catch(() => {
+          // Autoplay may fail, that's okay
+        });
+        // Switch active video after a brief moment for smooth crossfade
+        swapTimeout = setTimeout(() => {
+          setActiveVideoIndex(activeVideoIndex === 0 ? 1 : 0);
+        }, 100);
+      };
+      const handleError = () => {
+        setIsVideoLoading(false);
+      };
+
+      nextVideo.addEventListener('error', handleError, { once: true });
+      // Start decoding the hidden element; it stays invisible until the swap
+      nextVideo.play().catch(() => {});
+      if (nextVideo.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+        handleCanPlay();
+      } else {
+        nextVideo.addEventListener('canplay', handleCanPlay, { once: true });
+      }
+
+      return () => {
+        if (swapTimeout) clearTimeout(swapTimeout);
+        nextVideo.removeEventListener('canplay', handleCanPlay);
+        nextVideo.removeEventListener('error', handleError);
+      };
+    }
+
+    if (urls[activeSlot] === videoUrl && currentVideo) {
+      // Video is already loaded (e.g. right after a swap), ensure it's playing
       setIsVideoLoading(false);
-      const playPromise = currentVideoRef.current?.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(() => {});
+      currentVideo.play().catch(() => {});
+      if (currentVideo.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        markReady();
+      } else {
+        currentVideo.addEventListener('canplaythrough', markReady, { once: true });
       }
+      // Pause the now-hidden element once its fade-out has finished
+      const pauseTimeout = setTimeout(() => {
+        nextVideo?.pause();
+      }, 600);
+
+      return () => {
+        clearTimeout(pauseTimeout);
+        currentVideo.removeEventListener('canplaythrough', markReady);
+      };
     }
   }, [currentIndex, currentItem.backgroundVideoUrl, currentItem.videoUrl, activeVideoIndex]);
+
+  // Warm the inactive <video> with the next item once the preloader allows it
+  useEffect(() => {
+    if (!warmVideoUrl) return;
+    const inactiveSlot = activeVideoIndex === 0 ? 1 : 0;
+    const inactiveVideo = (inactiveSlot === 0 ? backgroundVideoRef1 : backgroundVideoRef2).current;
+    const urls = videoDataUrlsRef.current;
+    if (!inactiveVideo) return;
+    if (urls[inactiveSlot] === warmVideoUrl || urls[activeVideoIndex] === warmVideoUrl) return;
+
+    const warm = () => {
+      const poster = posterFor(warmVideoUrl);
+      if (poster) inactiveVideo.poster = poster;
+      // Element #1 carries autoPlay for the first item only; a warmed source
+      // must not start playing (and fully buffering) while hidden.
+      inactiveVideo.autoplay = false;
+      inactiveVideo.preload = isCompactViewport() ? 'metadata' : 'auto';
+      inactiveVideo.src = pickVideoSrc(warmVideoUrl);
+      urls[inactiveSlot] = warmVideoUrl;
+    };
+
+    // Never swap the source of an element that is still fading out
+    if (inactiveVideo.paused) {
+      warm();
+      return;
+    }
+    const timeout = setTimeout(warm, 650);
+    return () => clearTimeout(timeout);
+  }, [warmVideoUrl, activeVideoIndex]);
 
   // Handle scroll wheel events - ONLY manual scroll with better debouncing
   useEffect(() => {
@@ -406,6 +463,7 @@ const CommercialWork = () => {
                 src={currentItem.thumbnail}
                 alt={currentItem.title}
                 fill
+                unoptimized
                 className="object-cover"
                 priority
               />
@@ -437,11 +495,10 @@ const CommercialWork = () => {
           {/* Video 2 - Active when activeVideoIndex === 1 */}
           <motion.video
             ref={backgroundVideoRef2}
-            autoPlay
             loop
             muted
             playsInline
-            preload="auto"
+            preload="none"
             className="absolute inset-0 w-full h-full object-cover"
             animate={{
               scale: 1.1,
@@ -474,13 +531,13 @@ const CommercialWork = () => {
       />
 
       {/* Top Navigation - BACK and CREATIVE PROCESS */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-16 sm:pt-14 pb-6">
+      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-14 pb-6">
         {(selectedYoutubeUrl || selectedInstagramUrl) ? (
           <button 
             onClick={() => {
               handleCloseYoutube();
             }}
-            className="text-white uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
+            className="inline-flex items-center min-h-[48px] min-w-[48px] -ml-3 px-3 text-white uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
           >
             BACK
           </button>
@@ -492,18 +549,18 @@ const CommercialWork = () => {
             const setView = useNavigationStore.getState().setView;
             setView('creative-process');
           }}
-          className="px-6 py-3 rounded-full border border-gray-400 bg-transparent backdrop-blur-md text-white uppercase tracking-wider text-sm sm:text-base hover:bg-white/5 hover:border-gray-300 transition-all duration-200"
+          className="px-4 py-3 text-xs min-h-[48px] sm:px-6 sm:py-3 sm:text-sm md:px-4 md:text-sm lg:px-6 lg:text-base rounded-full border border-gray-400 bg-transparent backdrop-blur-md text-white uppercase tracking-wider hover:bg-white/5 hover:border-gray-300 transition-all duration-200"
         >
           CREATIVE PROCESS
         </button>
       </div>
 
       {/* EXPLORE and THE REAL CINEMA Text at Top */}
-      <div className="fixed top-16 sm:top-14 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
+      <div className="fixed top-[5.5rem] sm:top-28 md:top-14 [@media(max-height:500px)]:top-3 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
         <p className="text-gray-400 uppercase tracking-[0.2em] text-sm text-center mb-1 font-san-francisco">
           EXPLORE
         </p>
-        <h1 className="text-white uppercase tracking-[0.1em] text-3xl font-bold text-center font-inter">
+        <h1 className="text-white uppercase tracking-[0.1em] text-3xl [@media(max-height:500px)]:text-xl font-bold text-center font-inter">
           The Real Cinema
         </h1>
       </div>
@@ -554,25 +611,36 @@ const CommercialWork = () => {
                 const zIndex = isCenter ? 20 : 10;
 
                 // Calculate horizontal offset from center
-                // Cards are positioned with left: 50% (left edge at screen center)
-                const cardWidth = 346; // Max card width in px
-                const halfCard = cardWidth / 2;
+                // Cards sit at left: 50% and centreCardX shifts each one left by half its
+                // own rendered width, so xOffset is the card centre relative to the
+                // viewport centre (a title wider than the card cannot skew it)
+                // Mirrors the card size classes (base/sm/md/lg + short-landscape)
+                const isShort = windowHeight <= 500;
+                const cardWidth = isShort
+                  ? Math.round(windowHeight * 0.44)
+                  : windowWidth < 640
+                    ? 202
+                    : windowWidth < 768
+                      ? 230
+                      : windowWidth < 1024
+                        ? 288
+                        : 346;
                 
                 let xOffset;
                 if (isCenter) {
                   // Center the card at viewport center
-                  xOffset = -halfCard;
+                  xOffset = 0;
                 } else if (isLeft) {
                   // Position at left edge with half outside screen
                   // Card center should be at viewport left edge (x=0)
-                  xOffset = -(windowWidth / 2) - halfCard;
+                  xOffset = -(windowWidth / 2);
                 } else if (isRight) {
                   // Position at right edge with half outside screen  
                   // Card center should be at viewport right edge (x=windowWidth)
-                  xOffset = (windowWidth / 2) - halfCard;
+                  xOffset = windowWidth / 2;
                 } else {
                   // Off-screen cards positioned far away
-                  xOffset = (index - currentIndex) * 1000 - halfCard;
+                  xOffset = (index - currentIndex) * 1000;
                 }
 
                 return (
@@ -580,6 +648,7 @@ const CommercialWork = () => {
                     key={item.id}
                     className="flex flex-col items-center justify-center gap-4"
                     initial={false}
+                    transformTemplate={centreCardX}
                     onClick={() => {
                       if (!isDragging) {
                         if (isLeft) {
@@ -603,13 +672,18 @@ const CommercialWork = () => {
                     }}
                     animate={{
                       x: xOffset,
-                      y: -200, // Negative half of approximate card height for vertical centering
+                      // Negative half of approximate card + title height (exactly -200 on desktop)
+                      y: windowWidth >= 1024 && !isShort ? -200 : -(cardWidth / 2 + 24),
                     }}
-                    transition={{
-                      type: 'spring',
-                      stiffness: 210, // Reduced by 30% for slower animation
-                      damping: 30,
-                    }}
+                    transition={
+                      instantLayout
+                        ? { duration: 0 }
+                        : {
+                            type: 'spring',
+                            stiffness: 210, // Reduced by 30% for slower animation
+                            damping: 30,
+                          }
+                    }
                   >
                   {/* Square Box - Show when there's a background video */}
                   {item.backgroundVideoUrl && (
@@ -623,7 +697,7 @@ const CommercialWork = () => {
                                   handleOpenYoutube(item.instagramUrl);
                                 }
                               }}
-                              className="relative w-[202px] h-[202px] sm:w-[230px] sm:h-[230px] md:w-[288px] md:h-[288px] lg:w-[346px] lg:h-[346px] overflow-hidden group rounded-md cursor-pointer"
+                              className="relative w-[202px] h-[202px] sm:w-[230px] sm:h-[230px] md:w-[288px] md:h-[288px] lg:w-[346px] lg:h-[346px] [@media(max-height:500px)]:w-[44svh] [@media(max-height:500px)]:h-[44svh] overflow-hidden group rounded-md cursor-pointer"
                               transition={{ duration: 0.2 }}
                             >
                               <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl rounded-md pointer-events-none">
@@ -632,7 +706,10 @@ const CommercialWork = () => {
                                   alt={item.title}
                                   fill
                                   className="object-cover opacity-90 rounded-md transition-opacity duration-300"
-                                  sizes="(max-width: 640px) 202px, (max-width: 768px) 230px, (max-width: 1024px) 288px, 346px"
+                                  sizes={CARD_IMAGE_SIZES}
+                                  // The full-screen placeholder shows this same thumbnail at full size
+                                  // on mount, so share its URL instead of fetching a second variant
+                                  unoptimized={index === initialIndexRef.current}
                                 />
                                 {/* Overlay gradient */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent rounded-md" />
@@ -650,7 +727,7 @@ const CommercialWork = () => {
                         </CardContainer>
                       ) : (
                         <div
-                          className="relative w-[202px] h-[202px] sm:w-[230px] sm:h-[230px] md:w-[288px] md:h-[288px] lg:w-[346px] lg:h-[346px] overflow-hidden group rounded-md"
+                          className="relative w-[202px] h-[202px] sm:w-[230px] sm:h-[230px] md:w-[288px] md:h-[288px] lg:w-[346px] lg:h-[346px] [@media(max-height:500px)]:w-[44svh] [@media(max-height:500px)]:h-[44svh] overflow-hidden group rounded-md"
                         >
                           <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-black border border-gray-700/50 shadow-2xl rounded-md pointer-events-none">
                             <Image
@@ -658,7 +735,7 @@ const CommercialWork = () => {
                               alt={item.title}
                               fill
                               className="object-cover opacity-90 rounded-md transition-opacity duration-300"
-                              sizes="(max-width: 640px) 202px, (max-width: 768px) 230px, (max-width: 1024px) 288px, 346px"
+                              sizes={CARD_IMAGE_SIZES}
                             />
                             {/* Overlay gradient */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent rounded-md" />
@@ -703,7 +780,9 @@ const CommercialWork = () => {
       {!isMenuOpen && (
         <motion.button
           onClick={() => setIsMenuOpen(true)}
-          className="absolute bottom-8 sm:bottom-12 z-50 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center hover:border-white"
+          onPointerDown={warmOverlayChunks}
+          onFocus={warmOverlayChunks}
+          className="absolute bottom-[calc(2rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3rem+env(safe-area-inset-bottom))] [@media(max-height:500px)]:bottom-3 z-50 w-16 h-16 sm:w-20 sm:h-20 [@media(max-height:500px)]:w-12 [@media(max-height:500px)]:h-12 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center hover:border-white"
           style={{ 
             left: '50%',
             transform: 'translateX(-50%)',
@@ -763,7 +842,7 @@ const CommercialWork = () => {
           onClick={handleCloseYoutube}
         >
           {/* EXPLORE and THE REAL CINEMA Text - Overlapping Homepage Text */}
-          <div className="fixed top-16 sm:top-14 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
+          <div className="fixed top-[5.5rem] sm:top-28 md:top-14 [@media(max-height:500px)]:top-3 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -776,7 +855,7 @@ const CommercialWork = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.2 }}
-              className="text-white uppercase tracking-[0.1em] text-3xl font-bold text-center font-inter"
+              className="text-white uppercase tracking-[0.1em] text-3xl [@media(max-height:500px)]:text-xl font-bold text-center font-inter"
             >
               The Real Cinema
             </motion.h1>
@@ -830,7 +909,7 @@ const CommercialWork = () => {
           onClick={handleCloseYoutube}
         >
           {/* EXPLORE and THE REAL CINEMA Text - Overlapping Homepage Text */}
-          <div className="fixed top-16 sm:top-14 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
+          <div className="fixed top-[5.5rem] sm:top-28 md:top-14 [@media(max-height:500px)]:top-3 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -843,7 +922,7 @@ const CommercialWork = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.3, delay: 0.2 }}
-              className="text-white uppercase tracking-[0.1em] text-3xl font-bold text-center font-inter"
+              className="text-white uppercase tracking-[0.1em] text-3xl [@media(max-height:500px)]:text-xl font-bold text-center font-inter"
             >
               The Real Cinema
             </motion.h1>

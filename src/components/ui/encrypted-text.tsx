@@ -17,14 +17,16 @@ export const EncryptedText: React.FC<EncryptedTextProps> = ({
   revealedClassName = "text-black dark:text-white",
   revealDelayMs = 50,
 }) => {
-  const getEncryptedText = () => {
-    return text.split("").map(() => characters[Math.floor(Math.random() * characters.length)]).join("");
-  };
-
-  const [displayText, setDisplayText] = useState<string>(getEncryptedText());
+  // Deterministic initial value so server HTML matches the first client render;
+  // the random scramble only starts in the effect below.
+  const [displayText, setDisplayText] = useState<string>(text);
   const [isRevealed, setIsRevealed] = useState(false);
 
   useEffect(() => {
+    const getEncryptedText = () => {
+      return text.split("").map(() => characters[Math.floor(Math.random() * characters.length)]).join("");
+    };
+
     setIsRevealed(false);
     setDisplayText(getEncryptedText());
 

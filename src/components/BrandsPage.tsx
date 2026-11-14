@@ -115,10 +115,10 @@ const BrandsPage = () => {
       />
 
       {/* Top Navigation - BACK and CREATIVE PROCESS */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-16 sm:pt-14 pb-6">
+      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] lg:pt-14 pb-6">
         <button 
           onClick={handleBack}
-          className="text-white uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
+          className="inline-flex items-center min-h-[48px] min-w-[48px] -ml-3 px-3 text-white uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
         >
           BACK
         </button>
@@ -127,29 +127,29 @@ const BrandsPage = () => {
             const setView = useNavigationStore.getState().setView;
             setView('creative-process');
           }}
-          className="px-6 py-3 rounded-full border border-gray-400 bg-transparent backdrop-blur-md text-white uppercase tracking-wider text-sm sm:text-base hover:bg-white/5 hover:border-gray-300 transition-all duration-200"
+          className="px-4 py-3 min-h-[48px] sm:px-6 rounded-full border border-gray-400 bg-transparent backdrop-blur-md text-white uppercase tracking-wider text-xs sm:text-sm lg:text-base hover:bg-white/5 hover:border-gray-300 transition-all duration-200"
         >
           CREATIVE PROCESS
         </button>
       </div>
 
       {/* EXPLORE and THE REAL CINEMA Text at Top */}
-      <div className="fixed top-16 sm:top-14 left-1/2 z-50 -translate-x-1/2 px-4 pointer-events-none">
+      <div className="fixed inset-x-0 top-[5.5rem] lg:top-14 [@media(max-height:500px)]:top-3 z-50 flex flex-col items-center px-4 pointer-events-none">
         <div className="flex flex-col items-center">
           <p className="text-gray-400 uppercase tracking-[0.2em] text-sm text-center mb-1 font-san-francisco">
             EXPLORE
           </p>
-          <h1 className="text-white uppercase tracking-[0.1em] text-[2.34375rem] font-bold text-center font-inter">
+          <h1 className="text-white uppercase tracking-[0.1em] text-[1.5rem] min-[400px]:text-[1.875rem] sm:text-[clamp(1.75rem,3.6vw,2.34375rem)] lg:text-[2.34375rem] sm:whitespace-nowrap [@media(max-height:500px)]:text-xl font-bold text-center font-inter">
             The Real Cinema
           </h1>
         </div>
       </div>
 
       {/* Main Content - Two Scrolling Rows of Logos */}
-      <div className="fixed inset-0 flex flex-col items-center justify-center z-30 px-4 overflow-hidden">
+      <div className="fixed inset-0 flex flex-col items-center justify-center z-30 px-4 overflow-hidden [@media(max-height:500px)]:pt-16 [@media(max-height:500px)]:pb-[60px]">
         {/* Top Row - Scrolls Left to Right (moves left) */}
         <div 
-          className="w-full overflow-hidden mb-8"
+          className="w-full overflow-hidden mb-8 [@media(max-height:799px)]:mb-3"
           onMouseEnter={() => setIsTopHovered(true)}
           onMouseLeave={() => setIsTopHovered(false)}
         >
@@ -168,12 +168,13 @@ const BrandsPage = () => {
                 className="flex-shrink-0"
                 whileHover={{}}
               >
-                <div className="w-[320px] h-[240px] rounded-lg border border-gray-300/30 bg-black flex items-center justify-center p-6 overflow-hidden group cursor-pointer shadow-md">
+                <div className="w-[320px] h-[240px] [@media(min-height:501px)_and_(max-height:799px)]:h-[min(240px,24svh)] [@media(min-height:501px)_and_(max-height:799px)]:w-[calc(min(240px,24svh)*4/3)] [@media(max-height:500px)]:h-[min(120px,30svh)] [@media(max-height:500px)]:w-[calc(min(120px,30svh)*3/2)] [@media(max-height:500px)]:p-4 rounded-lg border border-gray-300/30 bg-black flex items-center justify-center p-6 overflow-hidden group cursor-pointer shadow-md">
                   <div className="relative w-full h-full flex items-center justify-center">
                     <Image
                       src={logo.imagePath}
                       alt={logo.name}
                       fill
+                      unoptimized
                       className="object-contain transition-all duration-300"
                       sizes="320px"
                     />
@@ -205,12 +206,13 @@ const BrandsPage = () => {
                 className="flex-shrink-0"
                 whileHover={{}}
               >
-                <div className="w-[320px] h-[240px] rounded-lg border border-gray-300/30 bg-black flex items-center justify-center p-6 overflow-hidden group cursor-pointer shadow-md">
+                <div className="w-[320px] h-[240px] [@media(min-height:501px)_and_(max-height:799px)]:h-[min(240px,24svh)] [@media(min-height:501px)_and_(max-height:799px)]:w-[calc(min(240px,24svh)*4/3)] [@media(max-height:500px)]:h-[min(120px,30svh)] [@media(max-height:500px)]:w-[calc(min(120px,30svh)*3/2)] [@media(max-height:500px)]:p-4 rounded-lg border border-gray-300/30 bg-black flex items-center justify-center p-6 overflow-hidden group cursor-pointer shadow-md">
                   <div className="relative w-full h-full flex items-center justify-center">
                     <Image
                       src={logo.imagePath}
                       alt={logo.name}
                       fill
+                      unoptimized
                       className="object-contain transition-all duration-300"
                       sizes="320px"
                     />
@@ -226,7 +228,7 @@ const BrandsPage = () => {
       {!isMenuOpen && (
         <motion.button
           onClick={() => setIsMenuOpen(true)}
-          className="fixed bottom-8 sm:bottom-12 z-50 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white"
+          className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3rem+env(safe-area-inset-bottom))] [@media(max-height:500px)]:bottom-3 z-50 w-16 h-16 sm:w-20 sm:h-20 [@media(max-height:500px)]:w-12 [@media(max-height:500px)]:h-12 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white"
           style={{ 
             left: '50%',
             transform: 'translateX(-50%)',

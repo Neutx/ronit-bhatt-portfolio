@@ -30,11 +30,11 @@ const MenuPopup = ({ isOpen, onClose, currentVideoTitle = '4X4 VIDEO' }: MenuPop
           onClick={onClose}
         >
           {/* Header - Positioned exactly where homepage text is (fixed to viewport) */}
-          <div className="fixed top-20 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
-            <p className="text-gray-400 uppercase tracking-[0.2em] text-[10px] sm:text-xs text-center mb-2 font-san-francisco">
+          <div className="fixed top-20 [@media(max-height:500px)]:top-3 left-0 right-0 z-50 flex flex-col items-center px-4 pointer-events-none">
+            <p className="text-gray-400 uppercase tracking-[0.2em] text-xs text-center mb-2 font-san-francisco">
               EXPLORE
             </p>
-            <h2 className="text-white uppercase tracking-[0.1em] text-[1.5625rem] sm:text-[1.875rem] lg:text-[2.34375rem] font-bold text-center font-inter">
+            <h2 className="text-white uppercase tracking-[0.1em] text-[1.5625rem] sm:text-[1.875rem] lg:text-[2.34375rem] [@media(max-height:500px)]:text-xl font-bold text-center font-inter">
               The Real Cinema
             </h2>
           </div>
@@ -58,7 +58,7 @@ const MenuPopup = ({ isOpen, onClose, currentVideoTitle = '4X4 VIDEO' }: MenuPop
             animate="visible"
             exit="exit"
             onClick={onClose}
-            className="fixed bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 z-50 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 text-gray-400 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white hover:text-white transition-all duration-300 flex items-center justify-center"
+            className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3rem+env(safe-area-inset-bottom))] [@media(max-height:500px)]:bottom-3 left-1/2 -translate-x-1/2 z-50 w-16 h-16 sm:w-20 sm:h-20 [@media(max-height:500px)]:w-12 [@media(max-height:500px)]:h-12 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 text-gray-400 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white hover:text-white transition-all duration-300 flex items-center justify-center"
             style={{ 
               display: 'flex',
               alignItems: 'center',
@@ -85,11 +85,11 @@ const MenuPopup = ({ isOpen, onClose, currentVideoTitle = '4X4 VIDEO' }: MenuPop
             </svg>
           </motion.button>
           <motion.div
-            className="relative w-full max-w-md px-8 py-12"
+            className="relative w-full max-w-md px-8 py-12 [@media(max-height:500px)]:py-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Menu Buttons */}
-            <div className="space-y-20 mb-6 flex flex-col items-center">
+            <div className="space-y-20 mb-6 [@media(max-height:500px)]:space-y-3 [@media(max-height:500px)]:mb-0 flex flex-col items-center">
               <AnimatePresence>
                 {isOpen && menuItems.map((item, index) => (
                   <motion.button
@@ -111,7 +111,7 @@ const MenuPopup = ({ isOpen, onClose, currentVideoTitle = '4X4 VIDEO' }: MenuPop
                         ease: [0.4, 0, 0.2, 1] 
                       }
                     }}
-                    className="relative w-3/5 py-2.5 px-3.5 text-white text-center text-xs font-light font-san-francisco uppercase tracking-wider overflow-hidden"
+                    className="relative w-3/5 py-2.5 max-xl:py-3 max-xl:min-h-[48px] [@media(pointer:coarse)]:py-3 [@media(pointer:coarse)]:min-h-[48px] px-3.5 text-white text-center text-xs font-light font-san-francisco uppercase tracking-wider overflow-hidden"
                     style={{
                       borderRadius: '150px',
                       border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -177,12 +177,12 @@ const MenuPopup = ({ isOpen, onClose, currentVideoTitle = '4X4 VIDEO' }: MenuPop
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="fixed right-[20%] top-1/2 -translate-y-1/2 z-50 group"
+              className="fixed right-[20%] top-1/2 -translate-y-1/2 -mt-[11px] -mr-2 max-sm:top-auto max-sm:mt-0 max-sm:right-[12%] max-sm:bottom-[calc(7rem+env(safe-area-inset-bottom))] z-50 group"
             >
               <a
                 href="mailto:bhattronit751@gamil.com"
                 onClick={(e) => e.stopPropagation()}
-                className="text-gray-400 group-hover:text-gray-200 text-sm uppercase tracking-wider font-space-grotesk whitespace-nowrap transition-colors duration-200 cursor-pointer"
+                className="flex items-center justify-center min-h-[48px] min-w-[48px] px-2 text-gray-400 group-hover:text-gray-200 text-sm uppercase tracking-wider font-space-grotesk whitespace-nowrap transition-colors duration-200 cursor-pointer"
               >
                 EMAIL
               </a>
@@ -205,14 +205,14 @@ const MenuPopup = ({ isOpen, onClose, currentVideoTitle = '4X4 VIDEO' }: MenuPop
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="fixed left-[20%] top-1/2 -translate-y-1/2 z-50 group"
+              className="fixed left-[20%] top-1/2 -translate-y-1/2 -mt-[11px] -ml-2 max-sm:top-auto max-sm:mt-0 max-sm:left-[12%] max-sm:bottom-[calc(7rem+env(safe-area-inset-bottom))] z-50 group"
             >
               <a
                 href="https://wa.me/916351260485"
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="text-gray-400 group-hover:text-gray-200 text-sm uppercase tracking-wider font-space-grotesk whitespace-nowrap transition-colors duration-200 cursor-pointer"
+                className="flex items-center justify-center min-h-[48px] min-w-[48px] px-2 text-gray-400 group-hover:text-gray-200 text-sm uppercase tracking-wider font-space-grotesk whitespace-nowrap transition-colors duration-200 cursor-pointer"
               >
                 TEXT
               </a>

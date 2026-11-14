@@ -1,4 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getConnection } from '@/src/lib/mediaSources';
+import imageLoader, { CARD_IMAGE_SIZES } from '@/src/lib/imageLoader';
 
 interface PreloadItem {
   videoUrl?: string;
@@ -9,126 +11,82 @@ interface PreloadItem {
 interface UsePreloadMediaOptions {
   items: PreloadItem[];
   currentIndex: number;
-  preloadRange?: number; // Number of adjacent items to preload (default: 1)
+  /** Scroll direction: 'right' warms the next item, 'left' the previous one. */
+  direction?: 'left' | 'right';
+  preloadRange?: number; // Number of items ahead to warm (default: 1)
+  /** Start only once the active background video has fired 'canplaythrough'. */
+  enabled: boolean;
 }
 
+type IdleWindow = Window & {
+  requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+  cancelIdleCallback?: (id: number) => void;
+};
+
 /**
- * Custom hook to preload media files (videos and images) for adjacent carousel items
- * This prevents black screens when switching between carousel items
+ * Warms the media of the item ahead in the scroll direction, after the active
+ * background video can play through and the main thread is idle.
+ *
+ * - Thumbnails are requested once per URL at low fetch priority.
+ * - Videos are NOT fetched here. The hook returns the data URL of the next
+ *   background video so the caller can warm its inactive <video> element.
+ * - Skipped entirely on Save-Data or on connections slower than 4g.
  */
 export function usePreloadMedia({
   items,
   currentIndex,
+  direction = 'right',
   preloadRange = 1,
-}: UsePreloadMediaOptions) {
-  const preloadedRef = useRef<Set<string>>(new Set());
-  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const linkElementsRef = useRef<Map<string, HTMLLinkElement>>(new Map());
+  enabled,
+}: UsePreloadMediaOptions): string | null {
+  const preloadedImagesRef = useRef<Set<string>>(new Set());
+  const [warm, setWarm] = useState<{ index: number; direction: string; url: string } | null>(null);
 
   useEffect(() => {
-    // Check if we're on a slow connection - skip preloading if so
-    if (typeof window !== 'undefined' && 'connection' in navigator) {
-      const connection = (navigator as any).connection;
-      if (connection) {
-        const effectiveType = connection.effectiveType;
-        // Skip preloading on slow connections (2g, slow-2g)
-        if (effectiveType === '2g' || effectiveType === 'slow-2g') {
-          return;
-        }
-      }
+    if (!enabled || typeof window === 'undefined' || items.length < 2) return;
+
+    const connection = getConnection();
+    if (connection?.saveData) return;
+    if (connection?.effectiveType && connection.effectiveType !== '4g') return;
+
+    const step = direction === 'left' ? -1 : 1;
+    const targets: PreloadItem[] = [];
+    for (let i = 1; i <= preloadRange; i++) {
+      const index = (((currentIndex + step * i) % items.length) + items.length) % items.length;
+      if (items[index]) targets.push(items[index]);
     }
 
-    // Calculate indices to preload
-    const indicesToPreload: number[] = [];
-    for (let i = -preloadRange; i <= preloadRange; i++) {
-      if (i === 0) continue; // Skip current item
-      const index = (currentIndex + i + items.length) % items.length;
-      indicesToPreload.push(index);
-    }
-
-    // Preload media for adjacent items
-    indicesToPreload.forEach((index) => {
-      const item = items[index];
-      if (!item) return;
-
-      // Preload background video
-      const videoUrl = item.backgroundVideoUrl || item.videoUrl;
-      if (videoUrl && !preloadedRef.current.has(videoUrl)) {
-        preloadedRef.current.add(videoUrl);
-        const controller = new AbortController();
-        abortControllersRef.current.set(videoUrl, controller);
-
-        // Check if link already exists
-        if (!linkElementsRef.current.has(videoUrl)) {
-          // Use link preload for better browser optimization
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = 'video';
-          link.href = videoUrl;
-          link.crossOrigin = 'anonymous';
-          document.head.appendChild(link);
-          linkElementsRef.current.set(videoUrl, link);
+    const run = () => {
+      targets.forEach((item) => {
+        const thumb = item.thumbnail;
+        if (thumb && !preloadedImagesRef.current.has(thumb)) {
+          preloadedImagesRef.current.add(thumb);
+          const img = new Image();
+          (img as HTMLImageElement & { fetchPriority?: string }).fetchPriority = 'low';
+          img.decoding = 'async';
+          // Same candidates as the card <Image>, so the browser warms the file
+          // the card will actually request (480 variant on phones).
+          img.sizes = CARD_IMAGE_SIZES;
+          img.srcset = `${imageLoader({ src: thumb, width: 480 })} 480w, ${thumb} 720w`;
+          img.src = thumb;
         }
+      });
 
-        // Also fetch to ensure it's in cache
-        fetch(videoUrl, {
-          signal: controller.signal,
-          cache: 'force-cache',
-        }).catch(() => {
-          // Ignore errors - preload is best effort
-        });
-      }
-
-      // Preload thumbnail image
-      if (item.thumbnail && !preloadedRef.current.has(item.thumbnail)) {
-        preloadedRef.current.add(item.thumbnail);
-        const controller = new AbortController();
-        abortControllersRef.current.set(item.thumbnail, controller);
-
-        // Check if link already exists
-        if (!linkElementsRef.current.has(item.thumbnail)) {
-          const link = document.createElement('link');
-          link.rel = 'preload';
-          link.as = 'image';
-          link.href = item.thumbnail;
-          document.head.appendChild(link);
-          linkElementsRef.current.set(item.thumbnail, link);
-        }
-
-        fetch(item.thumbnail, {
-          signal: controller.signal,
-          cache: 'force-cache',
-        }).catch(() => {
-          // Ignore errors
-        });
-      }
-    });
-
-    // Cleanup: Cancel preloads for items that are no longer adjacent
-    const allUrls = new Set<string>();
-    indicesToPreload.forEach((index) => {
-      const item = items[index];
-      if (item) {
-        const videoUrl = item.backgroundVideoUrl || item.videoUrl;
-        if (videoUrl) allUrls.add(videoUrl);
-        if (item.thumbnail) allUrls.add(item.thumbnail);
-      }
-    });
-
-    // Cancel preloads that are no longer needed
-    abortControllersRef.current.forEach((controller, url) => {
-      if (!allUrls.has(url)) {
-        controller.abort();
-        abortControllersRef.current.delete(url);
-        preloadedRef.current.delete(url);
-      }
-    });
-
-    // Cleanup function
-    return () => {
-      // Don't cancel on cleanup - let preloads complete
-      // This ensures media is ready for next visit
+      const nextVideo = targets[0]?.backgroundVideoUrl || targets[0]?.videoUrl;
+      if (nextVideo) setWarm({ index: currentIndex, direction, url: nextVideo });
     };
-  }, [currentIndex, items, preloadRange]);
-}
 
+    const w = window as IdleWindow;
+    if (typeof w.requestIdleCallback === 'function') {
+      const id = w.requestIdleCallback(run, { timeout: 4000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const timeoutId = window.setTimeout(run, 1500);
+    return () => window.clearTimeout(timeoutId);
+  }, [enabled, currentIndex, direction, items, preloadRange]);
+
+  if (!enabled || !warm || warm.index !== currentIndex || warm.direction !== direction) {
+    return null;
+  }
+  return warm.url;
+}

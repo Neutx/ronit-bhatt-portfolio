@@ -26,10 +26,10 @@
 
 html,
 body {
-  max-width: 100vw;
+  max-width: 100%;
   overflow: hidden;
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
+  width: 100%;
   position: fixed;
 }
 
@@ -160,13 +160,33 @@ a {
   font-weight: 700;
 }
 
-/* Page container fade-in support */
-.page-container {
-  opacity: 0;
-  visibility: hidden;
-  filter: blur(20px);
-  will-change: opacity, filter;
-  pointer-events: none;
+/* Page container fade-in support.
+   Visible by default so server HTML paints without waiting for JS (mobile has
+   no intro). Only the desktop intro hides it, and there the server-rendered
+   black .loader overlay covers it until the exit animation reveals it. */
+@media (min-width: 769px) {
+  .page-container {
+    opacity: 0;
+    visibility: hidden;
+    filter: blur(20px);
+    will-change: opacity, filter;
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 769px) and (prefers-reduced-motion: reduce) {
+  .page-container {
+    filter: none;
+  }
+}
+
+/* Set on <html> by Loader once the intro has finished (or was skipped), so any
+   later-mounted .page-container (client navigation back to '/') stays visible. */
+.intro-done .page-container {
+  opacity: 1;
+  visibility: visible;
+  filter: none;
+  pointer-events: auto;
 }
 
 .page-container.page-visible {
@@ -193,45 +213,77 @@ a {
 }
 
 /* Glowing Orb Animation */
+/* Composited only: opacity + transform. The glow pulse lives on a static
+   box-shadow layer (::after) whose opacity animates, instead of animating
+   box-shadow itself (which repaints every frame). */
 @keyframes orbFlicker {
   0%, 100% {
     opacity: 1;
     transform: scale(1);
-    box-shadow: 0 0 10px rgba(255, 255, 255, 0.8),
-                0 0 20px rgba(255, 255, 255, 0.6),
-                0 0 30px rgba(255, 255, 255, 0.4),
-                0 0 40px rgba(255, 255, 255, 0.2);
   }
   25% {
     opacity: 0.7;
     transform: scale(0.95);
-    box-shadow: 0 0 5px rgba(255, 255, 255, 0.6),
-                0 0 10px rgba(255, 255, 255, 0.4),
-                0 0 15px rgba(255, 255, 255, 0.2);
   }
   50% {
     opacity: 0.9;
     transform: scale(1.05);
-    box-shadow: 0 0 15px rgba(255, 255, 255, 1),
-                0 0 30px rgba(255, 255, 255, 0.8),
-                0 0 45px rgba(255, 255, 255, 0.6),
-                0 0 60px rgba(255, 255, 255, 0.4);
   }
   75% {
     opacity: 0.6;
     transform: scale(0.9);
-    box-shadow: 0 0 8px rgba(255, 255, 255, 0.7),
-                0 0 16px rgba(255, 255, 255, 0.5);
+  }
+}
+
+@keyframes orbGlow {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  25% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  75% {
+    opacity: 0.1;
   }
 }
 
 .orb-dot {
+  position: relative;
   width: 30px;
   height: 30px;
   border-radius: 50%;
   background: white;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.8),
+              0 0 20px rgba(255, 255, 255, 0.6),
+              0 0 30px rgba(255, 255, 255, 0.4),
+              0 0 40px rgba(255, 255, 255, 0.2);
   animation: orbFlicker 6s ease-in-out infinite;
-  will-change: opacity, transform, box-shadow;
+  will-change: opacity, transform;
+}
+
+.orb-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 15px rgba(255, 255, 255, 1),
+              0 0 30px rgba(255, 255, 255, 0.8),
+              0 0 45px rgba(255, 255, 255, 0.6),
+              0 0 60px rgba(255, 255, 255, 0.4);
+  opacity: 0;
+  animation: orbGlow 6s ease-in-out infinite;
+  will-change: opacity;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-dot,
+  .orb-dot::after {
+    animation: none;
+  }
 }
 
 @media (min-width: 640px) {

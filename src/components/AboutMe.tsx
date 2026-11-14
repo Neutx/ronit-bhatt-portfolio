@@ -56,40 +56,44 @@ const AboutMe = () => {
       />
 
       {/* Top Navigation - BACK and CREATIVE PROCESS */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-16 sm:pt-14 pb-6">
+      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] lg:pt-14 pb-6">
         <button 
           onClick={goBack}
-          className="text-white uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
+          className="inline-flex items-center min-h-[48px] min-w-[48px] -ml-3 px-3 text-white uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
         >
           BACK
         </button>
         <button 
           onClick={() => setView('creative-process')}
-          className="px-6 py-3 rounded-full border border-gray-400 bg-transparent backdrop-blur-md text-white uppercase tracking-wider text-sm sm:text-base hover:bg-white/5 hover:border-gray-300 transition-all duration-200"
+          className="px-4 py-3 min-h-[48px] sm:px-6 rounded-full border border-gray-400 bg-transparent backdrop-blur-md text-white uppercase tracking-wider text-xs sm:text-sm lg:text-base hover:bg-white/5 hover:border-gray-300 transition-all duration-200"
         >
           CREATIVE PROCESS
         </button>
       </div>
 
       {/* EXPLORE and THE REAL CINEMA Text at Top */}
-      <div className="fixed top-16 sm:top-14 left-1/2 z-50 -translate-x-1/2 px-4 pointer-events-none">
+      <div className="fixed inset-x-0 top-[5.5rem] lg:top-14 [@media(max-height:500px)]:top-3 z-50 flex flex-col items-center px-4 pointer-events-none">
         <div className="flex flex-col items-center">
           <p className="text-gray-400 uppercase tracking-[0.2em] text-sm text-center mb-1 font-san-francisco">
             EXPLORE
           </p>
-          <h1 className="text-white uppercase tracking-[0.1em] text-[2.34375rem] font-bold text-center font-inter">
+          <h1 className="text-white uppercase tracking-[0.1em] text-[1.5rem] min-[400px]:text-[1.875rem] sm:text-[clamp(1.75rem,3.6vw,2.34375rem)] lg:text-[2.34375rem] sm:whitespace-nowrap [@media(max-height:500px)]:text-xl font-bold text-center font-inter">
             The Real Cinema
           </h1>
         </div>
       </div>
 
       {/* Main Content - Image and Text */}
-      <div className="fixed inset-0 flex items-center justify-center z-30 px-4 sm:px-8 md:px-12 lg:px-16 overflow-hidden">
+      {/* 1024-1279px (tablet landscape / small laptops): the two-column layout is
+          taller than the space between the fixed title and the menu orb, so it
+          starts below the title and scrolls instead of sliding under it. */}
+      <div className="fixed inset-0 z-30 overflow-y-auto overscroll-contain lg:overflow-hidden lg:max-xl:overflow-y-auto">
+        <div className="min-h-full flex items-center justify-center px-4 sm:px-8 md:px-12 lg:px-16 pt-44 pb-36 lg:py-0 lg:max-xl:pt-40 lg:max-xl:pb-36 [@media(max-height:500px)]:pt-20 [@media(max-height:500px)]:pb-20">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="flex flex-col md:flex-row items-center md:items-start gap-8 md:gap-12 lg:gap-16 max-w-7xl w-full"
+          className="flex flex-col lg:flex-row [@media(max-height:500px)]:flex-row items-center lg:items-start [@media(max-height:500px)]:items-start gap-8 lg:gap-16 [@media(max-height:500px)]:gap-8 max-w-7xl w-full"
         >
           {/* About Me Image - Left Side */}
           <motion.div
@@ -100,11 +104,12 @@ const AboutMe = () => {
           >
             <CardContainer className="w-auto h-auto" intensity={3}>
               <CardItem translateZ={20} as="div">
-                <div className="relative w-[300px] h-[300px] sm:w-[350px] sm:h-[350px] md:w-[400px] md:h-[400px] lg:w-[450px] lg:h-[450px] overflow-hidden rounded-md">
+                <div className="relative w-[min(300px,80vw)] h-[min(300px,80vw)] sm:w-[350px] sm:h-[350px] md:w-[clamp(260px,calc(100svh-724px),400px)] md:h-[clamp(260px,calc(100svh-724px),400px)] lg:w-[450px] lg:h-[450px] [@media(max-height:500px)]:w-[45svh] [@media(max-height:500px)]:h-[45svh] overflow-hidden rounded-md">
                   <Image
-                    src="/images/about_me.webp"
+                    src="/images/about_me.v2.webp"
                     alt="About Me"
                     fill
+                    unoptimized
                     className="object-cover rounded-md"
                     sizes="(max-width: 768px) 350px, (max-width: 1024px) 400px, 450px"
                     priority
@@ -150,7 +155,7 @@ const AboutMe = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.6 }}
-              className="flex items-center gap-6 flex-wrap"
+              className="flex items-center gap-6 flex-nowrap"
             >
               {/* Instagram */}
               <a
@@ -196,13 +201,14 @@ const AboutMe = () => {
             </motion.div>
           </motion.div>
         </motion.div>
+        </div>
       </div>
 
       {/* Circular Film Icon Button at Bottom */}
       {!isMenuOpen && (
         <motion.button
           onClick={() => setIsMenuOpen(true)}
-          className="fixed bottom-8 sm:bottom-12 z-50 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white"
+          className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3rem+env(safe-area-inset-bottom))] [@media(max-height:500px)]:bottom-3 z-50 w-16 h-16 sm:w-20 sm:h-20 [@media(max-height:500px)]:w-12 [@media(max-height:500px)]:h-12 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white"
           style={{ 
             left: '50%',
             transform: 'translateX(-50%)',

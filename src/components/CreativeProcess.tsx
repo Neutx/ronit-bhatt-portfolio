@@ -170,6 +170,28 @@ const VideoTextMask = ({ text }: { text: string }) => {
   );
 };
 
+// Below lg, or on viewports shorter than 800px, sections get a top/bottom safe
+// zone so content clears the fixed title and the menu orb. At lg+ with
+// height >= 800px the padding is 0, matching the original desktop layout.
+const SECTION_SAFE_ZONE =
+  'pt-[13rem] sm:pt-44 pb-36 lg:[@media(min-height:800px)]:pt-0 lg:[@media(min-height:800px)]:pb-0 [@media(max-height:500px)]:pt-20 [@media(max-height:500px)]:pb-16';
+
+// Each section is its own scroll container so tall content stays reachable on
+// small screens; swipe/wheel only change sections once it can't scroll further.
+const SECTION_SCROLLER = 'h-full max-w-full overflow-y-auto overflow-x-hidden overscroll-contain';
+
+const canScrollInDirection = (el: HTMLElement | null, direction: 1 | -1) => {
+  if (!el) return false;
+  return direction > 0
+    ? el.scrollTop + el.clientHeight < el.scrollHeight - 1
+    : el.scrollTop > 0;
+};
+
+const getScrollable = (target: EventTarget | null) =>
+  target instanceof Element
+    ? (target.closest('[data-scrollable]') as HTMLElement | null)
+    : null;
+
 const CreativeProcess = () => {
   const goBack = useNavigationStore((state: { goBack: () => void }) => state.goBack);
   const backgroundVideoRef = useRef<HTMLVideoElement>(null);
@@ -181,6 +203,7 @@ const CreativeProcess = () => {
   const isChangingRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const touchScrollRef = useRef<{ el: HTMLElement; top: number; canNext: boolean; canPrev: boolean } | null>(null);
   
   // Use about_me.webm as background video (can be changed later)
   const backgroundVideoUrl = '/videos/about_me.webm';
@@ -222,6 +245,11 @@ const CreativeProcess = () => {
   // Wheel event handler
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
+      // Let a scrollable section scroll natively until it reaches its edge
+      if (e.deltaY !== 0 && canScrollInDirection(getScrollable(e.target), e.deltaY > 0 ? 1 : -1)) {
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
       
@@ -249,6 +277,10 @@ const CreativeProcess = () => {
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       touchStartYRef.current = e.touches[0].clientY;
+      const sc = getScrollable(e.target);
+      touchScrollRef.current = sc
+        ? { el: sc, top: sc.scrollTop, canNext: canScrollInDirection(sc, 1), canPrev: canScrollInDirection(sc, -1) }
+        : null;
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
@@ -258,7 +290,15 @@ const CreativeProcess = () => {
       const diff = touchStartYRef.current - touchEndY;
       const minSwipeDistance = 50; // Minimum distance for a swipe
       
-      if (Math.abs(diff) > minSwipeDistance) {
+      const sc = touchScrollRef.current;
+      touchScrollRef.current = null;
+      // The swipe scrolled a section that still had room to scroll in that
+      // direction: keep the current section.
+      const scrolledInside = sc !== null && (
+        sc.el.scrollTop !== sc.top || (diff > 0 ? sc.canNext : sc.canPrev)
+      );
+
+      if (Math.abs(diff) > minSwipeDistance && !scrolledInside) {
         if (diff > 0) {
           // Swipe up - go to next section
           changeSection(1);
@@ -313,17 +353,17 @@ const CreativeProcess = () => {
     switch (section.type) {
       case 'script':
         return (
-          <div className="h-full flex items-center justify-center px-4 sm:px-8">
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className={`min-h-full flex items-center justify-center px-4 sm:px-8 ${SECTION_SAFE_ZONE}`}>
             <div className="text-center" style={{ maxWidth: '95%', width: '100%' }}>
               <h1 
-                className="font-bold uppercase text-center"
+                className="font-bold uppercase text-center text-[length:clamp(1rem,5.6vw,4rem)] sm:text-[length:clamp(2rem,5vw,4rem)]"
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   fontWeight: 700,
                   letterSpacing: '0.02em',
                   color: '#a0a0a0',
                   textAlign: 'center',
-                  fontSize: 'clamp(2rem, 5vw, 4rem)',
                   lineHeight: '1.1',
                   whiteSpace: 'normal',
                   wordBreak: 'normal',
@@ -346,21 +386,22 @@ const CreativeProcess = () => {
               </h1>
             </div>
           </div>
+          </div>
         );
 
       case 'emotion':
         return (
-          <div className="h-full flex flex-col items-center justify-center px-4 sm:px-8">
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className={`min-h-full flex flex-col items-center justify-center px-4 sm:px-8 ${SECTION_SAFE_ZONE}`}>
             <div className="text-center" style={{ maxWidth: '95%', width: '100%' }}>
               <h2 
-                className="font-bold uppercase text-center mb-8"
+                className="font-bold uppercase text-center mb-8 text-[length:clamp(0.875rem,4.2vw,4rem)] xl:text-[length:clamp(2rem,5vw,4rem)]"
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   fontWeight: 700,
                   letterSpacing: '0.01em',
                   color: '#a0a0a0',
                   textAlign: 'center',
-                  fontSize: 'clamp(2rem, 5vw, 4rem)',
                   lineHeight: '1.1',
                   whiteSpace: 'normal',
                   wordBreak: 'normal',
@@ -395,8 +436,8 @@ const CreativeProcess = () => {
                       const line2 = text.substring(splitIndex + 'moodboards'.length).trim();
                       return (
                         <>
-                          <div style={{ whiteSpace: 'nowrap' }}>{line1}</div>
-                          <div style={{ whiteSpace: 'nowrap' }}>{line2}</div>
+                          <div className="xl:whitespace-nowrap">{line1}</div>
+                          <div className="xl:whitespace-nowrap">{line2}</div>
                         </>
                       );
                     }
@@ -406,11 +447,13 @@ const CreativeProcess = () => {
               </p>
             </div>
           </div>
+          </div>
         );
 
       case 'planning':
         return (
-          <div className="h-full flex items-center justify-center px-4 sm:px-8">
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className={`min-h-full flex items-center justify-center px-4 sm:px-8 ${SECTION_SAFE_ZONE}`}>
             <div className="text-center" style={{ maxWidth: '95%', width: '100%' }}>
               <p 
                 className="text-gray-300 leading-relaxed text-center"
@@ -434,9 +477,9 @@ const CreativeProcess = () => {
                       const line3 = text.substring(split2 + 'sculpted.'.length).trim();
                       return (
                         <>
-                          <div style={{ whiteSpace: 'nowrap' }}>{line1}</div>
-                          <div style={{ whiteSpace: 'nowrap' }}>{line2}</div>
-                          <div style={{ whiteSpace: 'nowrap' }}>{line3}</div>
+                          <div className="xl:whitespace-nowrap">{line1}</div>
+                          <div className="xl:whitespace-nowrap">{line2}</div>
+                          <div className="xl:whitespace-nowrap">{line3}</div>
                         </>
                       );
                     }
@@ -446,16 +489,18 @@ const CreativeProcess = () => {
               </p>
             </div>
           </div>
+          </div>
         );
 
       case 'tools':
         return (
-          <div className="h-full flex flex-col items-center justify-center px-4 sm:px-8" style={{ paddingBottom: '120px' }}>
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className="min-h-full flex flex-col items-center justify-center px-4 sm:px-8 pt-[13rem] sm:pt-44 pb-36 lg:[@media(min-height:800px)]:pt-0 lg:[@media(min-height:800px)]:pb-[120px] [@media(max-height:500px)]:pt-20 [@media(max-height:500px)]:pb-16">
             <div className="w-full max-w-6xl">
               <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold uppercase tracking-wider text-center mb-12" style={{ color: '#a0a0a0' }}>
                 {section.content.title}
               </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid grid-cols-3 gap-3 sm:gap-4">
                 {section.content.tools?.map((tool, idx) => (
                   <div
                     key={idx}
@@ -467,6 +512,7 @@ const CreativeProcess = () => {
                           src={tool.imagePath}
                           alt={tool.name}
                           fill
+                          unoptimized
                           className="object-contain"
                           sizes="(max-width: 640px) 70px, 90px"
                         />
@@ -477,18 +523,19 @@ const CreativeProcess = () => {
               </div>
             </div>
           </div>
+          </div>
         );
 
       case 'budget':
         return (
-          <div className="h-full flex flex-col items-center justify-center px-4 sm:px-8">
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className={`min-h-full flex flex-col items-center justify-center px-4 sm:px-8 ${SECTION_SAFE_ZONE}`}>
             <div className="max-w-4xl w-full" style={{ margin: '0 auto' }}>
               <p 
-                className="mb-8 leading-relaxed"
+                className="mb-8 leading-relaxed xl:whitespace-nowrap"
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   fontSize: 'clamp(1rem, 2.5vw, 1.5rem)',
-                  whiteSpace: 'nowrap',
                   textAlign: 'left',
                   color: '#a0a0a0',
                 }}
@@ -511,20 +558,22 @@ const CreativeProcess = () => {
               </ol>
             </div>
           </div>
+          </div>
         );
 
       case 'identity':
         return (
-          <div className="h-full flex flex-col items-center justify-center px-4 sm:px-8">
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className={`min-h-full flex flex-col items-center justify-center px-4 sm:px-8 ${SECTION_SAFE_ZONE}`}>
             <div className="text-center w-full flex flex-col items-center justify-center">
               <div 
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   fontWeight: 700,
-                  fontSize: 'clamp(8rem, 20vw, 18rem)',
+                  fontSize: 'clamp(4.5rem, 20vw, 18rem)',
                   letterSpacing: '0.02em',
                   textAlign: 'center',
-                  marginBottom: '-1.5rem',
+                  marginBottom: 'max(-1.5rem, -0.1em)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -537,7 +586,7 @@ const CreativeProcess = () => {
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   fontWeight: 700,
-                  fontSize: 'clamp(2.8rem, 7vw, 6.3rem)',
+                  fontSize: 'clamp(2rem, 7vw, 6.3rem)',
                   letterSpacing: '0.02em',
                   color: '#a0a0a0',
                   textAlign: 'center',
@@ -550,18 +599,19 @@ const CreativeProcess = () => {
               </h1>
             </div>
           </div>
+          </div>
         );
 
       case 'profile':
         return (
-          <div className="h-full flex items-center justify-center px-4 sm:px-8 overflow-y-auto py-20">
-            <div className="w-full" style={{ margin: '0 auto', maxWidth: '80%' }}>
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className="min-h-full flex items-center justify-center px-4 sm:px-8 pt-[13rem] sm:pt-44 pb-36 lg:[@media(min-height:800px)]:py-20 [@media(max-height:500px)]:pt-20 [@media(max-height:500px)]:pb-16">
+            <div className="w-full sm:max-w-[80%]" style={{ margin: '0 auto' }}>
               <div 
-                className="grid grid-cols-2 gap-6 sm:gap-8"
+                className="grid grid-cols-1 sm:grid-cols-2 sm:[grid-auto-rows:1fr] gap-6 sm:gap-8"
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   color: '#a0a0a0',
-                  gridAutoRows: '1fr',
                 }}
               >
                 {/* Top Left: Roles */}
@@ -581,7 +631,7 @@ const CreativeProcess = () => {
                       <span 
                         style={{
                           fontWeight: 700,
-                          fontSize: 'clamp(0.85rem, 1.5vw, 1rem)',
+                          fontSize: 'clamp(0.95rem, 1.5vw, 1rem)',
                         }}
                       >
                         {role.title}
@@ -590,7 +640,7 @@ const CreativeProcess = () => {
                       <span
                         style={{
                           fontWeight: 400,
-                          fontSize: 'clamp(0.85rem, 1.5vw, 1rem)',
+                          fontSize: 'clamp(0.95rem, 1.5vw, 1rem)',
                         }}
                       >
                         {role.description}
@@ -616,17 +666,17 @@ const CreativeProcess = () => {
                       <span
                         style={{
                           fontWeight: 700,
-                          fontSize: 'clamp(0.85rem, 1.5vw, 1rem)',
+                          fontSize: 'clamp(0.95rem, 1.5vw, 1rem)',
                         }}
                       >
                         Pre-Production:
                       </span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Scripts & breakdowns: {section.content.workflow.scripts}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Scripts & breakdowns: {section.content.workflow.scripts}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Visual planning - {section.content.workflow.visualPlanning}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Visual planning - {section.content.workflow.visualPlanning}</span>
                     </div>
                   </div>
                 )}
@@ -647,20 +697,20 @@ const CreativeProcess = () => {
                     <div
                       style={{
                         fontWeight: 700,
-                        fontSize: 'clamp(0.85rem, 1.5vw, 1rem)',
+                        fontSize: 'clamp(0.95rem, 1.5vw, 1rem)',
                         marginBottom: '0.75rem',
                       }}
                     >
                       Cinematography:
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Cameras - {section.content.workflow.cameras}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Cameras - {section.content.workflow.cameras}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Primary - {section.content.workflow.primary}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Primary - {section.content.workflow.primary}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Gear - {section.content.workflow.gear}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Gear - {section.content.workflow.gear}</span>
                     </div>
                   </div>
                 )}
@@ -681,44 +731,45 @@ const CreativeProcess = () => {
                     <div
                       style={{
                         fontWeight: 700,
-                        fontSize: 'clamp(0.85rem, 1.5vw, 1rem)',
+                        fontSize: 'clamp(0.95rem, 1.5vw, 1rem)',
                         marginBottom: '0.75rem',
                       }}
                     >
                       Post-Production:
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Edit - {section.content.workflow.edit}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Edit - {section.content.workflow.edit}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Color - {section.content.workflow.color}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Color - {section.content.workflow.color}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Sound - {section.content.workflow.sound}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Sound - {section.content.workflow.sound}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0.4rem' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Delivery - {section.content.workflow.delivery}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Delivery - {section.content.workflow.delivery}</span>
                     </div>
                     <div style={{ marginLeft: '0.75rem', marginBottom: '0' }}>
-                      <span style={{ fontSize: 'clamp(0.8rem, 1.4vw, 0.95rem)' }}>Workflow - {section.content.workflow.workflow}</span>
+                      <span style={{ fontSize: 'clamp(0.9rem, 1.4vw, 0.95rem)' }}>Workflow - {section.content.workflow.workflow}</span>
                     </div>
                   </div>
                 )}
               </div>
             </div>
           </div>
+          </div>
         );
 
       case 'ai':
         return (
-          <div className="h-full flex flex-col items-center justify-center px-4 sm:px-8">
+          <div className={SECTION_SCROLLER} data-scrollable>
+          <div className={`min-h-full flex flex-col items-center justify-center px-4 sm:px-8 ${SECTION_SAFE_ZONE}`}>
             <div className="text-center max-w-5xl">
               <h1 
-                className="font-bold uppercase tracking-wider leading-tight mb-6"
+                className="font-bold uppercase tracking-wider leading-tight mb-6 text-[length:clamp(1.25rem,7.2vw,4rem)] sm:text-[length:clamp(2rem,5vw,4rem)]"
                 style={{
                   fontFamily: "'Inter', 'Helvetica Neue', Arial, sans-serif",
                   fontWeight: 700,
-                  fontSize: 'clamp(2rem, 5vw, 4rem)',
                   letterSpacing: '0.02em',
                   color: '#a0a0a0',
                   display: 'flex',
@@ -740,6 +791,7 @@ const CreativeProcess = () => {
                 {section.content.subtitle}
               </p>
             </div>
+          </div>
           </div>
         );
 
@@ -773,10 +825,10 @@ const CreativeProcess = () => {
       <div className="fixed inset-0 bg-black/40 z-10" />
 
       {/* Top Navigation - BACK */}
-      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-16 sm:pt-14 pb-6">
+      <div className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 sm:px-8 pt-[max(1rem,env(safe-area-inset-top))] lg:pt-14 pb-6">
         <button 
           onClick={goBack}
-          className="uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
+          className="inline-flex items-center min-h-[48px] min-w-[48px] -ml-3 -my-3 px-3 uppercase tracking-wider text-sm sm:text-base hover:text-gray-300 transition-colors"
           style={{ color: '#a0a0a0' }}
         >
           BACK
@@ -785,12 +837,12 @@ const CreativeProcess = () => {
       </div>
 
       {/* EXPLORE and THE CREATIVE PROCESS Text at Top */}
-      <div className="fixed top-16 sm:top-14 left-1/2 z-50 -translate-x-1/2 px-4 pointer-events-none">
+      <div className="fixed inset-x-0 top-[5.5rem] lg:top-14 [@media(max-height:500px)]:top-3 z-50 flex flex-col items-center px-4 pointer-events-none">
         <div className="flex flex-col items-center">
           <p className="text-gray-400 uppercase tracking-[0.2em] text-sm text-center mb-1 font-san-francisco">
             EXPLORE
           </p>
-          <h1 className="text-white uppercase tracking-[0.1em] text-[2.34375rem] font-bold text-center font-inter">
+          <h1 className="text-white uppercase tracking-[0.1em] text-[1.5rem] min-[400px]:text-[1.875rem] sm:text-[clamp(1.75rem,3.6vw,2.34375rem)] lg:text-[2.34375rem] sm:whitespace-nowrap [@media(max-height:500px)]:text-xl font-bold text-center font-inter">
             The Creative Process
           </h1>
         </div>
@@ -816,7 +868,7 @@ const CreativeProcess = () => {
       {!isMenuOpen && (
         <motion.button
           onClick={() => setIsMenuOpen(true)}
-          className="fixed bottom-8 sm:bottom-12 z-50 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white"
+          className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] sm:bottom-[calc(3rem+env(safe-area-inset-bottom))] [@media(max-height:500px)]:bottom-3 z-50 w-16 h-16 sm:w-20 sm:h-20 [@media(max-height:500px)]:w-12 [@media(max-height:500px)]:h-12 rounded-full bg-transparent backdrop-blur-md border-2 border-gray-400 flex items-center justify-center transition-all duration-300 hover:shadow-[0_0_20px_rgba(255,255,255,0.5)] hover:border-white"
           style={{ 
             left: '50%',
             transform: 'translateX(-50%)',
